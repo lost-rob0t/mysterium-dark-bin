@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+
+    steps:
+      - name: Install build dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed
+          base-devel git
+          at-spi2-core gtk3 libappindicator libnotify libsecret
+          libxss libxtst nss openresolv util-linux-libs xdg-utils
+
+      - uses: actions/checkout@v4
+
+      - name: Build package
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE' && makepkg --cleanbuild --noconfirm"
+
+      - name: Inspect package
+        run: |
+          package_file="$(find . -maxdepth 1 -name 'mysterium-dark-bin-*.pkg.tar.zst' -print -quit)"
+          test -n "$package_file"
+          pacman -Qlp "$package_file"
+          pacman -U --noconfirm "$package_file"
+          test -L /usr/bin/mysterium-vpn-desktop
+          test "$(stat -c '%a' /opt/MysteriumDark/chrome-sandbox)" = 4755
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mysterium-dark-bin
+          path: '*.pkg.tar.zst'
